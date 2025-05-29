@@ -1,6 +1,8 @@
 # curxy
 
-#### _cursor_ + _proxy_ = **curxy**
+#### _cursor_ + _proxy_ + _ngrok_ = **curxy-ngrok**
+
+This is a fork of [curxy](https://github.com/ryoppippi/curxy) that uses Ngrok tunnels instead of cloudflared.
 
 [![JSR](https://jsr.io/badges/@ryoppippi/curxy)](https://jsr.io/@ryoppippi/curxy)
 [![JSR](https://jsr.io/badges/@ryoppippi/curxy/score)](https://jsr.io/@ryoppippi/curxy)
@@ -35,18 +37,24 @@ So, we need a proxy worker that can forward the data to the ollama server.
    deno run -A jsr:@ryoppippi/curxy
    ```
 
-   if you limit the access to the ollama server, you can set `OPENAI_API_KEY`
+   If you want to limit the access to your ollama server, you can set `OPENAI_API_KEY`
    environment variable.
 
    ```bash
-   OPENAI_API_KEY=your_openai_api_key deno run -A jsr:@ryoppippi/curxy
+   OPENAI_API_KEY=your_openai_api_key NGROK_AUTHTOKEN=your_ngrok_token NGROK_DOMAIN=your_ngrok_domain deno run -A jsr:@ryoppippi/curxy
 
    Listening on http://127.0.0.1:62192/
-   ◐ Starting cloudflared tunnel to http://127.0.0.1:62192                                                                                                                                                                                                                                                           5:39:59 PM
-   Server running at: https://remaining-chen-composition-dressed.trycloudflare.com
+   ◐ Starting ngrok tunnel to http://127.0.0.1:62192
+   Server running at: https://your-custom-subdomain.ngrok.io
    ```
 
-   You can get the public URL hosted by cloudflare.
+   You can get the public URL hosted by ngrok. Optionally, set a custom domain with `NGROK_DOMAIN` env or `--ngrokDomain` CLI arg.
+
+   You can have access to a static subdomain in ngrok by going to _Universal Gateway_ > _Domains_:
+   ![Ngrok custom subdomain](images/Domains.png)
+
+   A premium account is required, otherwise you'll face this error:
+   ![Free model doesn't work](images/paid_ngrok_accounted_required.png)
 
 3. Enter the URL provided by `curxy` with /v1 appended to it into the "Override
    OpenAl Base URL" section of the cursor editor configuration.

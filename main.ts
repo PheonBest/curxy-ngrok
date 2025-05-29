@@ -1,16 +1,17 @@
 import process from "node:process";
 import { getRandomPort } from "get-port-please";
-import { startTunnel } from "untun";
 import { cli, define } from "gunshi";
 import terminalLink from "terminal-link";
 import { bold, green, italic } from "yoctocolors";
+import * as ngrok from "@ngrok/ngrok";
 
 import json from "./deno.json" with { type: "json" };
 import { validateURL } from "./util.ts";
 import { createApp } from "./proxy.ts";
-import { ensure, is } from "@core/unknownutil";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+const NGROK_AUTHTOKEN = Deno.env.get("NGROK_AUTHTOKEN");
+const NGROK_DOMAIN = Deno.env.get("NGROK_DOMAIN");
 
 const command = define({
   toKebab: true,
@@ -40,12 +41,17 @@ const command = define({
       default: "127.0.0.1",
       description: "The hostname to run the server on.",
     },
-    cloudflared: {
+    ngrok: {
       type: "boolean",
-      alias: "c",
+      alias: "n",
       default: true,
       negatable: true,
-      description: "Use cloudflared to tunnel the server",
+      description: "Use ngrok to tunnel the server",
+    },
+    ngrokDomain: {
+      type: "string",
+      default: NGROK_DOMAIN ?? undefined,
+      description: "Custom subdomain for ngrok (requires paid ngrok account)",
     },
   },
   examples: [
@@ -57,7 +63,7 @@ const command = define({
 
     "",
 
-    "OPENAI_API_KEY=sk-123456 curxy --port 8800",
+    "OPENAI_API_KEY=sk-123456 NGROK_AUTHTOKEN=your_token curxy --port 8800",
   ].join("\n"),
 
   async run(ctx) {
@@ -67,25 +73,36 @@ const command = define({
       OPENAI_API_KEY,
     });
 
-    await Promise.all([
-      Deno.serve(
-        { port: ctx.values.port, hostname: ctx.values.hostname },
-        app.fetch,
-      ),
-      ctx.values.cloudflared &&
-      startTunnel({ port: ctx.values.port, hostname: ctx.values.hostname })
-        .then(async (tunnel) => ensure(await tunnel?.getURL(), is.String))
-        .then((url) =>
-          console.log(
-            `Server running at: ${bold(terminalLink(url, url))}\n`,
-            green(
-              `enter ${bold(terminalLink(`${url}/v1`, `${url}/v1`))} into ${
-                italic(`Override OpenAl Base URL`)
-              } section in cursor settings`,
-            ),
-          )
-        ),
-    ]);
+    const serverPromise = Deno.serve(
+      { port: ctx.values.port, hostname: ctx.values.hostname },
+      app.fetch,
+    );
+
+    let ngrokUrl = null;
+    if (ctx.values.ngrok) {
+      if (!NGROK_AUTHTOKEN) {
+        throw new Error("NGROK_AUTHTOKEN env variable is required for ngrok tunnel");
+      }
+      // Start ngrok process
+      const listener = await ngrok.forward({
+        addr: ctx.values.port,
+        authtoken_from_env: true,
+        domain: ctx.values.ngrokDomain,
+      });
+
+      ngrokUrl = listener.url();
+      if (ngrokUrl) {
+        console.log(
+          `Server running at: ${bold(terminalLink(ngrokUrl, ngrokUrl))}\n`,
+          green(
+            `enter ${bold(terminalLink(`${ngrokUrl}/v1`, `${ngrokUrl}/v1`))} into ${italic(`Override OpenAl Base URL`)} section in cursor settings`,
+          ),
+        );
+      } else {
+        console.error("Failed to get ngrok public URL");
+      }
+    }
+    await serverPromise;
   },
 });
 
